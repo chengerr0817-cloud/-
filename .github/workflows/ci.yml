@@ -1,0 +1,155 @@
+# ============================================================
+# 墨迹博客 · 持续集成
+#
+# 触发：推送到 main、向 main 提 PR
+# 内容：前后端类型检查 + 构建验证 + Docker 镜像构建
+#
+# 注意：CI 使用占位凭据，无需真实 TCB 密钥即可跑通
+# （前端 Vite 构建会把空值注入产物，但不影响编译与类型检查）
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 同一分支的新推送自动取消旧的运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.18.3'
+
+jobs:
+  # ---------------------------------------------------------
+  # 前端：类型检查 + 生产构建
+  # ---------------------------------------------------------
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true
+
+      - name: Type check
+        run: npx tsc -b --noEmit
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+        env:
+          # 构建期占位值 —— CI 无需真实密钥
+          VITE_CLOUDBASE_ENV_ID: ci-placeholder-env
+          VITE_CLOUDBASE_REGION: ap-shanghai
+          VITE_CLOUDBASE_PUBLISH_KEY: ci-placeholder-key
+          VITE_OAUTH_RELAY_URL: https://example.com/oauth
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ---------------------------------------------------------
+  # 后端：类型检查 + 生产构建
+  # ---------------------------------------------------------
+  backend:
+    name: Backend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: pnpm build
+
+      - name: Verify ESM entrypoint exists
+        run: test -f dist/index.js && echo "dist/index.js OK"
+
+  # ---------------------------------------------------------
+  # Docker：验证两个镜像都能构建
+  # ---------------------------------------------------------
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          load: false
+          build-args: |
+            VITE_CLOUDBASE_ENV_ID=ci-placeholder-env
+            VITE_CLOUDBASE_REGION=ap-shanghai
+            VITE_CLOUDBASE_PUBLISH_KEY=ci-placeholder-key
+            VITE_OAUTH_RELAY_URL=https://example.com/oauth
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

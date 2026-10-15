@@ -93,12 +93,16 @@ function Carousel({
 
   React.useEffect(() => {
     if (!api) return
-    onSelect(api)
-    api.on("reInit", onSelect)
-    api.on("select", onSelect)
+    // onSelect 只在 embla 事件回调中触发；首次同步推迟到微任务，
+    // 避免在 effect 内同步 setState 触发级联渲染。
+    const handleSelect = () => onSelect(api)
+    queueMicrotask(handleSelect)
+    api.on("reInit", handleSelect)
+    api.on("select", handleSelect)
 
     return () => {
-      api?.off("select", onSelect)
+      api?.off("select", handleSelect)
+      api?.off("reInit", handleSelect)
     }
   }, [api, onSelect])
 

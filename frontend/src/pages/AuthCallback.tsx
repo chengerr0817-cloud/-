@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../lib/AuthContext'
+import { useAuth, type UserProfile } from '../lib/AuthContext'
 import app from '../lib/cloudbase'
 
 export default function AuthCallback() {
@@ -31,8 +31,12 @@ export default function AuthCallback() {
           data: { code, provider },
         })
 
-        const result = res.result as any
-        if (!result || result.status !== 'success') {
+        const result = res.result as {
+          status?: string
+          message?: string
+          data?: { access_token: string; refresh_token: string; user: UserProfile }
+        } | null
+        if (!result || result.status !== 'success' || !result.data) {
           setError(result?.message || 'Login failed')
           setTimeout(() => navigate('/'), 2000)
           return

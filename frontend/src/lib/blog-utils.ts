@@ -18,7 +18,7 @@ export function estimateReadMinutes(content: string): number {
     .replace(/`[^`]*`/g, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[#>*_~\-]+/g, '')
+    .replace(/[#>*_~-]+/g, '')
   const cjk = (plain.match(/[\u4e00-\u9fa5]/g) || []).length
   const words = (plain.replace(/[\u4e00-\u9fa5]/g, ' ').match(/[A-Za-z0-9]+/g) || []).length
   const minutes = Math.ceil(cjk / 350 + words / 220)
