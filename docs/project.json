@@ -3,6 +3,6 @@
   "sub_project_type": "",
   "name": "墨迹博客",
   "app_slug": "moji-blog",
-  "version_description": "Migrate blog from cloud TCB to local SQLite",
+  "version_description": "Add Electron desktop console and fix CI types",
   "preview_type": "pc"
 }
