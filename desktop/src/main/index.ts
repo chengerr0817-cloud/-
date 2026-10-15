@@ -24,7 +24,9 @@ import {
  * ------------------------------------------------------------------ */
 
 const DEV_URL = process.env.MOJI_DEV_URL || 'http://localhost:5273'
-const isDev = !app.isPackaged
+// 未打包但已存在渲染产物时也走生产加载，便于 start-desktop.sh 直接运行
+const hasRendererBuild = existsSync(path.join(__dirname, '../renderer/index.html'))
+const isDev = !app.isPackaged && !hasRendererBuild
 
 const paths = resolvePaths(__dirname)
 ensureDirs(paths)
