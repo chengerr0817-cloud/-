@@ -157,7 +157,7 @@
 │   └── Dockerfile               # 后端生产镜像
 │
 ├── scripts/
-│   ├── start-local.sh           # 本地一键启动（前后端 + 数据库初始化）
+│   ├── start-local.sh           # 本地服务管理（start/stop/restart/status/logs）
 │   └── deploy.sh                # 容器化部署脚本
 │
 ├── docs/
@@ -185,17 +185,36 @@
 git clone https://github.com/chengerr0817-cloud/-.git
 cd -
 
-# 自动安装依赖 + 初始化数据库（首次会导入 7 篇示例文章）+ 启动前后端
-./scripts/start-local.sh
+# 自动安装依赖 + 初始化数据库（首次会导入 7 篇示例文章）+ 后台启动前后端
+./scripts/start-local.sh start
 ```
 
 启动后访问 **http://localhost:5173** 即可。
 
-也可以分开启动：
+两个服务会**真正后台化**（脱离终端独立运行），因此关掉终端窗口后服务照常工作。
+
+#### 服务管理命令
 
 ```bash
-./scripts/start-local.sh backend   # 只启后端 :3000
-./scripts/start-local.sh frontend  # 只启前端 :5173
+./scripts/start-local.sh start    [backend|frontend|all]   # 启动（默认 all）
+./scripts/start-local.sh stop     [backend|frontend|all]   # 停止（默认 all）
+./scripts/start-local.sh restart  [backend|frontend|all]   # 重启（默认 all）
+./scripts/start-local.sh status                            # 查看运行状态
+./scripts/start-local.sh logs     [backend|frontend]       # 实时追踪日志
+```
+
+设计细节：
+
+- **重复启动安全**：已在运行的服务会被跳过，不会重复拉起
+- **端口冲突友好**：端口被其他程序占用时明确报错，不会静默失败
+- **优雅停止**：先发 `SIGTERM` 给进程清理机会，超时再 `SIGKILL`，并兜底清理残留监听进程
+- **进程可追溯**：PID 写入 `.run/*.pid`，日志写入 `logs/*.log`（均已 gitignore）
+- **启动自检**：脚本会等待端口就绪并探测 HTTP 200，失败时自动打印日志尾部
+
+用超管权限或自定义端口启动：
+
+```bash
+BACKEND_PORT=3001 FRONTEND_PORT=5174 ./scripts/start-local.sh start
 ```
 
 ### 分步启动
