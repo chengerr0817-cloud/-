@@ -10,11 +10,6 @@
     "url": "/about"
   },
   {
-    "pageKey": "AuthCallback",
-    "title": "登录回调",
-    "url": "/auth/callback"
-  },
-  {
     "pageKey": "Edit",
     "title": "编辑文章",
     "url": "/edit/:id"

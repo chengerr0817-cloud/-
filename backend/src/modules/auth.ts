@@ -57,9 +57,15 @@ authRouter.post('/register', (req: Request, res: Response) => {
 
 /** POST /api/auth/login — 登录 */
 authRouter.post('/login', (req: Request, res: Response) => {
-  const parsed = credsSchema.pick({ username: true, password: true }).safeParse(req.body)
+  // 登录只做「非空」校验：格式类错误统一按凭证错误返回 401，
+  // 避免把「密码太短」这类信息泄漏给攻击者。
+  const schema = z.object({
+    username: z.string().min(1).max(32),
+    password: z.string().min(1).max(128),
+  })
+  const parsed = schema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ status: 'error', message: '用户名或密码格式不正确' })
+    res.status(401).json({ status: 'error', message: '用户名或密码错误' })
     return
   }
   const { username, password } = parsed.data
