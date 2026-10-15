@@ -1,0 +1,57 @@
+[
+  {
+    "pageKey": "Home",
+    "title": "首页",
+    "url": "/"
+  },
+  {
+    "pageKey": "About",
+    "title": "关于",
+    "url": "/about"
+  },
+  {
+    "pageKey": "AuthCallback",
+    "title": "登录回调",
+    "url": "/auth/callback"
+  },
+  {
+    "pageKey": "Edit",
+    "title": "编辑文章",
+    "url": "/edit/:id"
+  },
+  {
+    "pageKey": "Login",
+    "title": "登录",
+    "url": "/login"
+  },
+  {
+    "pageKey": "MyPosts",
+    "title": "我的文章",
+    "url": "/me/posts"
+  },
+  {
+    "pageKey": "PostDetail",
+    "title": "文章详情",
+    "url": "/posts/:slug"
+  },
+  {
+    "pageKey": "Search",
+    "title": "搜索",
+    "url": "/search"
+  },
+  {
+    "pageKey": "Tags",
+    "title": "标签分类",
+    "url": "/tags"
+  },
+  {
+    "pageKey": "TagDetail",
+    "title": "标签文章",
+    "url": "/tags/:tagName"
+  },
+  {
+    "pageKey": "Write",
+    "title": "写文章",
+    "url": "/write"
+  }
+]
