@@ -6,3 +6,10 @@ dist
 *.log
 coverage
 .DS_Store
+
+# 本地数据与上传（不应打进镜像）
+data
+uploads
+*.db
+*.db-wal
+*.db-shm

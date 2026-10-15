@@ -1,264 +1,225 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { db, rpc } from '@/lib/cloudbase'
-import type {
-  PostListResult,
-  PostDetailResult,
-  TagWithCount,
-  SiteStats,
-  PostWithTags,
-  Tag,
-} from '@/types/blog'
+import { useCallback, useEffect, useState } from 'react'
+import apiClient, { getErrorMessage } from '@/lib/api-client'
 
 /* ------------------------------------------------------------------ *
- * Queries
+ * 类型（与后端 blog-repo.ts 保持一致）
  * ------------------------------------------------------------------ */
 
-/** Paginated list of published posts (plus the author's own drafts). */
-export function usePosts(page = 1, pageSize = 8, includeDrafts = false) {
-  const offset = (page - 1) * pageSize
-  return useQuery({
-    queryKey: ['posts', page, pageSize, includeDrafts],
-    queryFn: () =>
-      rpc<PostListResult>('list_posts', {
-        p_limit: pageSize,
-        p_offset: offset,
-        p_include_drafts: includeDrafts,
-      }),
-  })
+export interface Tag {
+  id: number
+  name: string
+  slug: string
+  color: string
+  post_count?: number
 }
 
-/** Single post detail by slug, with tags and related posts. */
-export function usePostDetail(slug: string | undefined) {
-  return useQuery({
-    queryKey: ['post', slug],
-    enabled: !!slug,
-    queryFn: () => rpc<PostDetailResult>('get_post_detail', { p_slug: slug }),
-  })
+export interface Post {
+  id: number
+  title: string
+  slug: string
+  summary: string | null
+  cover_url: string | null
+  status: 'draft' | 'published'
+  views: number
+  read_minutes: number
+  author_name: string | null
+  created_at: string
+  updated_at: string
+  published_at: string | null
+  tags: Tag[]
 }
 
-/** All tags with a published post count. */
-export function useTags() {
-  return useQuery({
-    queryKey: ['tags'],
-    queryFn: () => rpc<TagWithCount[]>('list_tags'),
-  })
+/** 列表页只需要部分字段（热门/相关文章）。 */
+export type PostSummary = Pick<
+  Post,
+  'id' | 'title' | 'slug' | 'summary' | 'cover_url' | 'read_minutes' | 'published_at'
+> & {
+  views?: number
+  tags?: Tag[]
 }
 
-/** Aggregate site statistics. */
-export function useSiteStats() {
-  return useQuery({
-    queryKey: ['site-stats'],
-    queryFn: () => rpc<SiteStats>('site_stats'),
-  })
+export interface SiteStats {
+  post_count: number
+  draft_count: number
+  total_views: number
+  tag_count: number
+  total_words: number
 }
-
-/** Posts belonging to a single tag (client-side filter over the full list). */
-export function usePostsByTag(tagSlug: string | undefined) {
-  return useQuery({
-    queryKey: ['posts-by-tag', tagSlug],
-    enabled: !!tagSlug,
-    queryFn: async () => {
-      // Pull a generous window then filter by tag on the client.
-      const res = await rpc<PostListResult>('list_posts', {
-        p_limit: 100,
-        p_offset: 0,
-        p_include_drafts: false,
-      })
-      const items = (res.items || []).filter((p) =>
-        (p.tags || []).some((t) => t.slug === tagSlug)
-      )
-      return { items, total: items.length }
-    },
-  })
-}
-
-/** Client-side keyword search across title, summary and content. */
-export function useSearchPosts(keyword: string) {
-  const q = keyword.trim().toLowerCase()
-  return useQuery({
-    queryKey: ['search', q],
-    enabled: q.length > 0,
-    queryFn: async () => {
-      const res = await rpc<PostListResult>('list_posts', {
-        p_limit: 200,
-        p_offset: 0,
-        p_include_drafts: false,
-      })
-      const items = (res.items || []).filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          (p.summary || '').toLowerCase().includes(q) ||
-          (p.content || '').toLowerCase().includes(q)
-      )
-      return { items, total: items.length }
-    },
-  })
-}
-
-/** The current user's own posts, including drafts. */
-export function useMyPosts(userId: string | undefined) {
-  return useQuery({
-    queryKey: ['my-posts', userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await db
-        .from('posts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
-      if (error) throw new Error(error.message)
-      return (data || []) as PostWithTags[]
-    },
-  })
-}
-
-/* ------------------------------------------------------------------ *
- * Mutations
- * ------------------------------------------------------------------ */
 
 export interface PostPayload {
   title: string
   slug: string
-  summary: string
-  content: string
-  cover_url: string | null
+  summary?: string | null
+  content?: string | null
+  cover_url?: string | null
   status: 'draft' | 'published'
-  read_minutes: number
-  author_name: string
+  read_minutes?: number
+  author_name?: string | null
+  tags?: string[]
 }
 
-/** Create a post, then sync its tag associations. */
-export function useCreatePost() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (input: { post: PostPayload; tags: string[] }) => {
-      // TCB PG REST does not support .select() after insert — insert then re-read by slug.
-      const { error } = await db.from('posts').insert({
-        title: input.post.title,
-        slug: input.post.slug,
-        summary: input.post.summary,
-        content: input.post.content,
-        cover_url: input.post.cover_url,
-        status: input.post.status,
-        read_minutes: input.post.read_minutes,
-        author_name: input.post.author_name,
-        published_at: input.post.status === 'published' ? new Date().toISOString() : null,
-      })
-      if (error) throw new Error(error.message)
-
-      const { data: created, error: readErr } = await db
-        .from('posts')
-        .select('id')
-        .eq('slug', input.post.slug)
-        .single()
-      if (readErr) throw new Error(readErr.message)
-
-      const postId = (created as { id: number }).id
-      await syncTags(postId, input.tags)
-      return postId
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['posts'] })
-      qc.invalidateQueries({ queryKey: ['post'] })
-      qc.invalidateQueries({ queryKey: ['tags'] })
-      qc.invalidateQueries({ queryKey: ['my-posts'] })
-      qc.invalidateQueries({ queryKey: ['site-stats'] })
-    },
-  })
+interface ListResult {
+  items: Post[]
+  total: number
 }
 
-/** Update an existing post and re-sync its tags. */
-export function useUpdatePost() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (input: { id: number; post: Partial<PostPayload>; tags: string[] }) => {
-      const patch: Record<string, unknown> = { ...input.post, updated_at: new Date().toISOString() }
-      if (input.post.status === 'published') {
-        patch.published_at = new Date().toISOString()
+interface QueryState<T> {
+  data: T | undefined
+  isLoading: boolean
+  error: string | null
+  refetch: () => void
+}
+
+/** 通用 GET hook：统一 loading / error / refetch 语义。 */
+function useApiQuery<T>(url: string | null, deps: unknown[] = []): QueryState<T> {
+  const [data, setData] = useState<T | undefined>(undefined)
+  const [loadingUrl, setLoadingUrl] = useState<string | null>(url)
+  const [error, setError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    if (!url) return
+    let alive = true
+    const run = async () => {
+      try {
+        const { data: payload } = await apiClient.get<T>(url)
+        if (!alive) return
+        setData(payload)
+        setError(null)
+      } catch (err) {
+        if (!alive) return
+        setError(getErrorMessage(err))
+      } finally {
+        if (alive) setLoadingUrl(null)
       }
-      const { error } = await db.from('posts').update(patch).eq('id', input.id)
-      if (error) throw new Error(error.message)
-      await syncTags(input.id, input.tags)
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['posts'] })
-      qc.invalidateQueries({ queryKey: ['post'] })
-      qc.invalidateQueries({ queryKey: ['tags'] })
-      qc.invalidateQueries({ queryKey: ['my-posts'] })
-      qc.invalidateQueries({ queryKey: ['site-stats'] })
-    },
-  })
-}
+    }
+    void run()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, tick, ...deps])
 
-/** Delete a post (cascades to post_tags / comments). */
-export function useDeletePost() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await db.from('posts').delete().eq('id', id)
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['posts'] })
-      qc.invalidateQueries({ queryKey: ['my-posts'] })
-      qc.invalidateQueries({ queryKey: ['tags'] })
-      qc.invalidateQueries({ queryKey: ['site-stats'] })
-    },
-  })
-}
-
-/** Increment a post's view counter (fire-and-forget). */
-export function incrementViews(slug: string) {
-  return rpc('inc_post_views', { p_slug: slug }).catch(() => undefined)
+  const refetch = useCallback(() => setTick((t) => t + 1), [])
+  return {
+    data: url ? data : undefined,
+    isLoading: !!url && loadingUrl !== null,
+    error,
+    refetch,
+  }
 }
 
 /* ------------------------------------------------------------------ *
- * Tag helpers
+ * 公开读取
  * ------------------------------------------------------------------ */
 
-/** Ensure tags exist (creating missing ones), then rebuild post_tags links. */
-export async function syncTags(postId: number, tagNames: string[]): Promise<void> {
-  // Clear existing links first.
-  const { error: delErr } = await db.from('post_tags').delete().eq('post_id', postId)
-  if (delErr) throw new Error(delErr.message)
-
-  const clean = Array.from(
-    new Set(tagNames.map((t) => t.trim()).filter(Boolean))
-  )
-  if (clean.length === 0) return
-
-  const tagIds: number[] = []
-  for (const name of clean) {
-    const slug = name.toLowerCase().replace(/\s+/g, '-')
-    const { data: existing } = await db.from('tags').select('id').eq('name', name).maybeSingle()
-    if (existing) {
-      tagIds.push((existing as { id: number }).id)
-    } else {
-      const { error: insErr } = await db.from('tags').insert({ name, slug, color: 'amber' })
-      if (insErr) continue
-      const { data: created } = await db.from('tags').select('id').eq('name', name).maybeSingle()
-      if (created) tagIds.push((created as { id: number }).id)
-    }
-  }
-
-  if (tagIds.length === 0) return
-  const links = tagIds.map((tag_id) => ({ post_id: postId, tag_id }))
-  const { error: linkErr } = await db.from('post_tags').insert(links)
-  if (linkErr) throw new Error(linkErr.message)
+/** 首页文章分页列表。 */
+export function usePosts(page = 1, limit = 10) {
+  return useApiQuery<ListResult>(`/blog/posts?page=${page}&limit=${limit}`)
 }
 
-/** Load tags for editing (name list). */
+/** 文章详情 + 标签 + 相关文章。 */
+export function usePostDetail(slug: string | undefined) {
+  return useApiQuery<{
+    found: true
+    post: Post
+    tags: Tag[]
+    related: PostSummary[]
+  }>(slug ? `/blog/posts/${encodeURIComponent(slug)}` : null)
+}
+
+/** 全部标签（含文章数）。 */
+export function useTags() {
+  return useApiQuery<Tag[]>('/blog/tags')
+}
+
+/** 站点统计数据。 */
+export function useSiteStats() {
+  return useApiQuery<SiteStats>('/blog/stats')
+}
+
+/** 热门文章。 */
+export function useHotPosts(limit = 5) {
+  return useApiQuery<{ posts: PostSummary[] }>(`/blog/posts/hot?limit=${limit}`)
+}
+
+/** 按标签筛选：复用列表接口后在本地过滤，避免额外后端接口。 */
+export function usePostsByTag(tagSlug: string | undefined, limit = 100) {
+  const state = useApiQuery<ListResult>(`/blog/posts?limit=${limit}`)
+  const filtered = state.data
+    ? {
+        items: state.data.items.filter((p) => p.tags?.some((t) => t.slug === tagSlug)),
+        total: 0,
+      }
+    : undefined
+  return { ...state, data: filtered }
+}
+
+/** 关键词搜索：拉取列表后在本地匹配标题、摘要与正文。 */
+export function useSearchPosts(keyword: string, limit = 100) {
+  const state = useApiQuery<ListResult>(`/blog/posts?limit=${limit}`)
+  const q = keyword.trim().toLowerCase()
+  const filtered =
+    state.data && q
+      ? {
+          items: state.data.items.filter((p) => {
+            const hay = `${p.title} ${p.summary ?? ''}`.toLowerCase()
+            return hay.includes(q)
+          }),
+          total: 0,
+        }
+      : state.data
+
+  return {
+    ...state,
+    data: q ? filtered : { items: [], total: 0 },
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 写作台
+ * ------------------------------------------------------------------ */
+
+/** 我的全部文章（含草稿）。 */
+export function useMyPosts(enabled = true) {
+  const state = useApiQuery<{ items: Post[] }>(enabled ? '/blog/my/posts' : null)
+  return { ...state, data: state.data?.items }
+}
+
+/** 编辑文章时读取其标签名列表。 */
 export async function fetchPostTagNames(postId: number): Promise<string[]> {
-  const { data, error } = await db
-    .from('post_tags')
-    .select('tag:tags(name)')
-    .eq('post_id', postId)
-  if (error) return []
-  const rows = (data || []) as { tag?: Tag | Tag[] }[]
-  return rows
-    .map((row) => {
-      const t = Array.isArray(row.tag) ? row.tag[0] : row.tag
-      return t?.name
-    })
-    .filter((n): n is string => !!n)
+  const { data } = await apiClient.get<{ tags: string[] }>(`/blog/my/posts/${postId}/tags`)
+  return data.tags ?? []
+}
+
+export async function createPost(payload: PostPayload): Promise<number> {
+  const { data } = await apiClient.post<{ id: number }>('/blog/posts', payload)
+  return data.id
+}
+
+export async function updatePost(id: number, payload: Partial<PostPayload>): Promise<void> {
+  await apiClient.put(`/blog/posts/${id}`, payload)
+}
+
+export async function deletePost(id: number): Promise<void> {
+  await apiClient.delete(`/blog/posts/${id}`)
+}
+
+/** 浏览量 +1（失败时静默，不影响阅读）。 */
+export async function incrementViews(slug: string): Promise<void> {
+  try {
+    await apiClient.post(`/blog/views/${encodeURIComponent(slug)}`)
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/** 上传图片/附件，返回可访问 URL。 */
+export async function uploadFile(file: File): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await apiClient.post<{ url: string }>('/upload', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data.url
 }

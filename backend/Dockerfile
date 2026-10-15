@@ -35,9 +35,10 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-# 云托管默认注入 PORT，这里给个兜底默认值
 ENV PORT=3000
 ENV API_PREFIX=/api
+ENV DB_PATH=/app/data/blog.db
+ENV UPLOAD_DIR=/app/uploads
 
 # 非 root 运行，提升安全性
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
@@ -46,6 +47,11 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+
+# 数据与上传目录（建议挂载为持久化卷，否则容器重建会丢数据）
+RUN mkdir -p /app/data /app/uploads && chown -R nodejs:nodejs /app/data /app/uploads
+
+VOLUME ["/app/data", "/app/uploads"]
 
 USER nodejs
 

@@ -1,69 +1,80 @@
-# React + TypeScript + Vite
+# 墨迹 · 前端
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + TypeScript + Vite 单页应用，通过 REST 接口访问本地后端。
 
-Currently, two official plugins are available:
+## 技术栈
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+| 类别 | 技术 |
+|------|------|
+| 框架 | React 19 + TypeScript |
+| 构建 | Vite 7 |
+| 样式 | Tailwind CSS v4 + shadcn/ui（Radix UI） |
+| 路由 | React Router v7 |
+| 数据 | Axios（自定义 hooks 封装） |
+| Markdown | react-markdown + remark-gfm + rehype-highlight + rehype-raw |
+| 动画 | Framer Motion |
+| 图标 | Lucide React |
 
-## Expanding the ESLint configuration
+## 目录结构
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+frontend/src/
+├── components/
+│   ├── blog/            # 博客组件（卡片、标签、Markdown 渲染、导航）
+│   └── ui/              # shadcn/ui 基础组件
+├── pages/               # 页面
+│   ├── Home.tsx         # 首页（文章流）
+│   ├── PostDetail.tsx   # 文章详情
+│   ├── Tags.tsx         # 标签总览
+│   ├── TagDetail.tsx    # 标签详情
+│   ├── About.tsx        # 关于
+│   ├── Search.tsx       # 搜索
+│   ├── Login.tsx        # 登录 / 注册
+│   ├── Write.tsx        # 写文章 / 编辑
+│   ├── MyPosts.tsx      # 我的文章
+│   └── NotFound.tsx     # 404
+├── hooks/
+│   └── usePosts.ts      # 全部数据请求 hooks（REST 封装）
+├── lib/
+│   ├── api-client.ts    # Axios 实例 + JWT 注入 + 错误处理
+│   ├── AuthContext.tsx  # 登录态上下文
+│   └── blog-utils.ts    # slug / 阅读时长 / 日期格式化
+├── types/
+│   └── blog.ts          # 与后端一致的类型定义
+└── index.css            # 设计系统与全局样式
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 开发
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm dev              # http://localhost:5173
 ```
+
+开发服务器会把 `/api` 与 `/uploads` 代理到后端 `http://localhost:3000`
+（可用环境变量 `BACKEND_PORT` 覆盖）。
+
+> 需要先启动后端，见根目录 `README.md`。
+
+## 构建
+
+```bash
+pnpm build            # 类型检查 + 产出 dist/
+pnpm preview          # 本地预览构建产物
+```
+
+生产构建产物为纯静态文件，可由任意静态服务器托管；
+也可以直接由后端托管（后端会自动读取 `../frontend/dist`）。
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `BACKEND_PORT` | `3000` | 开发代理指向的后端端口 |
+
+## 设计系统
+
+- **色彩**：暖琥珀主题，基于 oklch
+- **字体**：衬线标题（Playfair Display）+ 无衬线正文（Inter）
+- **Markdown 样式**：`.prose-moji` 类，代码高亮由 `.hljs-*` 控制
+- 全部设计变量定义在 `src/index.css`

@@ -20,23 +20,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MarkdownRenderer } from '@/components/blog/MarkdownRenderer'
 import { PostCard } from '@/components/blog/PostCard'
 import {
-  useCreatePost,
-  useUpdatePost,
+  createPost,
+  updatePost,
   fetchPostTagNames,
+  uploadFile,
 } from '@/hooks/usePosts'
-import { uploadFile } from '@/lib/storage'
-import { db } from '@/lib/cloudbase'
+import apiClient, { getErrorMessage } from '@/lib/api-client'
 import { estimateReadMinutes, markdownToPlain, slugify } from '@/lib/blog-utils'
 import { useAuth } from '@/lib/AuthContext'
-import type { Post, PostWithTags } from '@/types/blog'
+import type { Post } from '@/hooks/usePosts'
 
 export default function Write() {
   const { id } = useParams<{ id: string }>()
   const isEdit = !!id
   const navigate = useNavigate()
   const { user } = useAuth()
-  const createPost = useCreatePost()
-  const updatePost = useUpdatePost()
 
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
@@ -53,15 +51,10 @@ export default function Write() {
     if (!isEdit) return
     ;(async () => {
       try {
-        const { data, error } = await db.from('posts').select('*').eq('id', Number(id)).maybeSingle()
-        if (error || !data) {
+        const { data } = await apiClient.get<{ items: Post[] }>('/blog/my/posts')
+        const post = data.items.find((p) => p.id === Number(id))
+        if (!post) {
           toast.error('文章不存在或无权编辑')
-          navigate('/me/posts')
-          return
-        }
-        const post = data as Post
-        if (user && post.user_id && post.user_id !== user.uid) {
-          toast.error('你只能编辑自己的文章')
           navigate('/me/posts')
           return
         }
@@ -71,13 +64,13 @@ export default function Write() {
         setCoverUrl(post.cover_url || '')
         const names = await fetchPostTagNames(post.id)
         setTagNames(names)
-      } catch {
-        toast.error('加载文章失败')
+      } catch (err) {
+        toast.error(getErrorMessage(err))
       } finally {
         setLoading(false)
       }
     })()
-  }, [id, isEdit, navigate, user])
+  }, [id, isEdit, navigate])
 
   const readMinutes = useMemo(() => estimateReadMinutes(content), [content])
 
@@ -97,11 +90,11 @@ export default function Write() {
     if (!file) return
     setUploading(true)
     try {
-      const url = await uploadFile(file, 'cover')
+      const url = await uploadFile(file)
       setCoverUrl(url)
       toast.success('封面图上传成功')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '上传失败')
+      toast.error(getErrorMessage(err))
     } finally {
       setUploading(false)
       e.target.value = ''
@@ -118,7 +111,7 @@ export default function Write() {
       return
     }
     setSaving(status === 'draft' ? 'draft' : 'publish')
-    const slug = isEdit ? undefined : `${slugify(title)}-${Date.now().toString(36).slice(-4)}`
+    const slug = isEdit ? undefined : `${slugify(title) || 'post'}-${Date.now().toString(36).slice(-4)}`
     const payload = {
       title: title.trim(),
       summary: summary.trim() || markdownToPlain(content, 120),
@@ -126,35 +119,35 @@ export default function Write() {
       cover_url: coverUrl || null,
       status,
       read_minutes: readMinutes,
-      author_name: user?.name || user?.email?.split('@')[0] || '墨迹',
+      author_name: user?.display_name || user?.username || '墨迹',
+      tags: tagNames,
     }
     try {
       if (isEdit) {
-        await updatePost.mutateAsync({ id: Number(id), post: payload, tags: tagNames })
+        await updatePost(Number(id), payload)
       } else {
-        await createPost.mutateAsync({ post: { ...payload, slug: slug! }, tags: tagNames })
+        await createPost({ ...payload, slug: slug! })
       }
       toast.success(status === 'published' ? '文章已发布！' : '草稿已保存')
       navigate('/me/posts')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '保存失败')
+      toast.error(getErrorMessage(err))
     } finally {
       setSaving(null)
     }
   }
 
   // Live preview card data.
-  const previewPost: PostWithTags = {
+  const previewPost: Post = {
     id: Number(id) || 0,
     title: title || '未命名文章',
     slug: '',
     summary: summary || markdownToPlain(content, 120) || '文章摘要将在这里显示…',
-    content,
     cover_url: coverUrl || null,
     status: 'draft',
     views: 0,
     read_minutes: readMinutes,
-    author_name: user?.name || '墨迹',
+    author_name: user?.display_name || user?.username || '墨迹',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     published_at: null,

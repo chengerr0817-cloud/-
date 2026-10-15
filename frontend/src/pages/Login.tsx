@@ -1,91 +1,66 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Loader2, Mail, ShieldCheck } from 'lucide-react'
+import { BookOpen, KeyRound, Loader2, LogIn, User as UserIcon, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuth, type EmailVerificationInfo } from '@/lib/AuthContext'
+import { useAuth } from '@/lib/AuthContext'
+import { getErrorMessage } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FadeIn } from '@/components/MotionPrimitives'
 
-/** Simple Google "G" mark (Brand icons are not in lucide). */
-function GoogleIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden>
-      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z" />
-      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-      <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 13.9-5.4l-6.4-5.4C29.3 34.7 26.8 36 24 36c-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.5 39.6 16.2 44 24 44z" />
-      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6.4 5.4C41.6 35.5 44 30.1 44 24c0-1.2-.1-2.3-.4-3.5z" />
-    </svg>
-  )
-}
-
 export default function Login() {
   const navigate = useNavigate()
-  const { signInWithGoogle, sendEmailCode, signInWithEmail } = useAuth()
+  const { login, register, hasUsers } = useAuth()
 
-  const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [verificationInfo, setVerificationInfo] = useState<EmailVerificationInfo | null>(null)
-  const [stage, setStage] = useState<'email' | 'code'>('email')
-  const [sending, setSending] = useState(false)
-  const [verifying, setVerifying] = useState(false)
-  const [googleLoading, setGoogleLoading] = useState(false)
+  // 站点还没有任何账号时，默认切到注册模式。
+  const [mode, setMode] = useState<'login' | 'register'>(hasUsers ? 'login' : 'register')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSendCode = async (e: React.FormEvent) => {
+  const isRegister = mode === 'register'
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      toast.error('请输入有效的邮箱地址')
+    const name = username.trim()
+    if (name.length < 2) {
+      toast.error('用户名至少 2 个字符')
       return
     }
-    setSending(true)
-    try {
-      const info = await sendEmailCode(email)
-      setVerificationInfo(info)
-      setStage('code')
-      toast.success('验证码已发送，请查收邮箱')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '验证码发送失败')
-    } finally {
-      setSending(false)
+    if (password.length < 6) {
+      toast.error('密码至少 6 位')
+      return
     }
-  }
+    if (isRegister && password !== confirm) {
+      toast.error('两次输入的密码不一致')
+      return
+    }
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (code.trim().length < 4) {
-      toast.error('请输入完整的验证码')
-      return
-    }
-    if (!verificationInfo) {
-      toast.error('验证会话已失效，请重新发送验证码')
-      setStage('email')
-      return
-    }
-    setVerifying(true)
+    setSubmitting(true)
     try {
-      await signInWithEmail(email, code.trim(), verificationInfo)
-      toast.success('登录成功，欢迎回来！')
-      navigate('/')
+      if (isRegister) {
+        await register(name, password, displayName.trim() || undefined)
+        toast.success('账号创建成功，欢迎加入墨迹！')
+      } else {
+        await login(name, password)
+        toast.success('登录成功，欢迎回来！')
+      }
+      navigate('/me/posts')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '验证失败，请检查验证码')
+      toast.error(getErrorMessage(err))
     } finally {
-      setVerifying(false)
-    }
-  }
-
-  const handleGoogle = async () => {
-    setGoogleLoading(true)
-    try {
-      await signInWithGoogle()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Google 登录失败')
-      setGoogleLoading(false)
+      setSubmitting(false)
     }
   }
 
   return (
-    <div className="container flex items-center justify-center" style={{ padding: 'var(--spacing-3xl) 1rem', minHeight: '78vh' }}>
+    <div
+      className="container flex items-center justify-center"
+      style={{ padding: 'var(--spacing-3xl) 1rem', minHeight: '78vh' }}
+    >
       <FadeIn>
         <div
           className="w-full rounded-2xl border border-border bg-card shadow-lg"
@@ -100,95 +75,106 @@ export default function Login() {
               <BookOpen size={24} strokeWidth={2.2} />
             </span>
             <h1 className="font-serif font-bold" style={{ fontSize: '1.6rem' }}>
-              欢迎回到墨迹
+              {isRegister ? '创建墨迹账号' : '欢迎回到墨迹'}
             </h1>
             <p className="text-sm text-muted-foreground" style={{ marginTop: '0.3rem' }}>
-              登录后即可发布与管理你的文章
+              {isRegister ? '注册后即可发布与管理你的文章' : '登录后即可继续写作'}
             </p>
           </div>
 
-          {/* Email OTP form */}
-          {stage === 'email' ? (
-            <form onSubmit={handleSendCode} className="flex flex-col" style={{ gap: 'var(--spacing-md)' }}>
-              <div className="flex flex-col" style={{ gap: 'var(--spacing-xs)' }}>
-                <Label htmlFor="email">邮箱地址</Label>
-                <div className="relative">
-                  <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{ paddingLeft: '2.3rem' }}
-                  />
-                </div>
-              </div>
-              <Button type="submit" disabled={sending} style={{ gap: 'var(--spacing-xs)' }}>
-                {sending ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                {sending ? '发送中…' : '发送验证码'}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerify} className="flex flex-col" style={{ gap: 'var(--spacing-md)' }}>
-              <div className="flex flex-col" style={{ gap: 'var(--spacing-xs)' }}>
-                <Label htmlFor="code">验证码</Label>
+          <form onSubmit={handleSubmit} className="flex flex-col" style={{ gap: 'var(--spacing-md)' }}>
+            <div className="flex flex-col" style={{ gap: 'var(--spacing-xs)' }}>
+              <Label htmlFor="username">用户名</Label>
+              <div className="relative">
+                <UserIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  id="code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="请输入 6 位验证码"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  maxLength={6}
-                  className="text-center tracking-[0.5em] font-medium"
+                  id="username"
+                  autoComplete="username"
+                  placeholder="例如 admin"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  style={{ paddingLeft: '2.3rem' }}
                 />
-                <p className="text-xs text-muted-foreground">
-                  验证码已发送至 <span className="text-foreground">{email}</span>
-                </p>
               </div>
-              <Button type="submit" disabled={verifying} style={{ gap: 'var(--spacing-xs)' }}>
-                {verifying && <Loader2 size={16} className="animate-spin" />}
-                {verifying ? '验证中…' : '登录 / 注册'}
-              </Button>
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-primary transition-colors"
-                onClick={() => {
-                  setStage('email')
-                  setCode('')
-                }}
-              >
-                更换邮箱
-              </button>
-            </form>
-          )}
+            </div>
 
-          {/* Divider */}
-          <div className="flex items-center" style={{ gap: 'var(--spacing-sm)', margin: 'var(--spacing-lg) 0' }}>
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">或</span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
+            {isRegister && (
+              <div className="flex flex-col" style={{ gap: 'var(--spacing-xs)' }}>
+                <Label htmlFor="display">
+                  昵称 <span className="text-muted-foreground font-normal">（选填）</span>
+                </Label>
+                <Input
+                  id="display"
+                  placeholder="显示在文章作者处，留空则用用户名"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                />
+              </div>
+            )}
 
-          {/* Google */}
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={googleLoading}
-            onClick={handleGoogle}
-            style={{ gap: 'var(--spacing-xs)' }}
+            <div className="flex flex-col" style={{ gap: 'var(--spacing-xs)' }}>
+              <Label htmlFor="password">密码</Label>
+              <div className="relative">
+                <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+                  placeholder="至少 6 位"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{ paddingLeft: '2.3rem' }}
+                />
+              </div>
+            </div>
+
+            {isRegister && (
+              <div className="flex flex-col" style={{ gap: 'var(--spacing-xs)' }}>
+                <Label htmlFor="confirm">确认密码</Label>
+                <Input
+                  id="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="再输入一次密码"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                />
+              </div>
+            )}
+
+            <Button type="submit" disabled={submitting} style={{ gap: 'var(--spacing-xs)' }}>
+              {submitting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : isRegister ? (
+                <UserPlus size={16} />
+              ) : (
+                <LogIn size={16} />
+              )}
+              {submitting ? '处理中…' : isRegister ? '注册并登录' : '登录'}
+            </Button>
+          </form>
+
+          <p className="text-center text-sm text-muted-foreground" style={{ marginTop: 'var(--spacing-lg)' }}>
+            {isRegister ? '已经有账号了？' : '还没有账号？'}
+            <button
+              type="button"
+              className="text-primary hover:underline font-medium"
+              style={{ marginLeft: '0.3rem' }}
+              onClick={() => {
+                setMode(isRegister ? 'login' : 'register')
+                setPassword('')
+                setConfirm('')
+              }}
+            >
+              {isRegister ? '去登录' : '立即注册'}
+            </button>
+          </p>
+
+          <p
+            className="text-center text-xs text-muted-foreground"
+            style={{ marginTop: 'var(--spacing-md)', lineHeight: 1.7 }}
           >
-            {googleLoading ? <Loader2 size={16} className="animate-spin" /> : <GoogleIcon />}
-            使用 Google 账号登录
-          </Button>
-
-          <p className="text-center text-xs text-muted-foreground" style={{ marginTop: 'var(--spacing-lg)', lineHeight: 1.7 }}>
-            首次使用邮箱验证码登录将自动创建账号
-            <br />
-            登录即表示同意本站的服务条款与隐私政策
+            账号数据保存在本机数据库中，仅你本人可访问
           </p>
         </div>
       </FadeIn>

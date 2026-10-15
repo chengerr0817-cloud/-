@@ -101,8 +101,8 @@ export default function About() {
             关于这个博客
           </h2>
           <p className="text-muted-foreground" style={{ lineHeight: 1.9 }}>
-            「墨迹」是一个用 React + Express + 腾讯云开发（TCB）搭建的个人博客。
-            文章数据存储在云端 PostgreSQL，图片与附件托管在云存储，并支持登录后在线写作。
+            「墨迹」是一个用 React + Express + SQLite 搭建的个人博客。
+            文章数据保存在本机数据库中，图片与附件存于本地磁盘，并支持登录后在线写作。
             这里没有花哨的追踪，只有持续的记录 —— 愿它见证我，也陪伴你，一起慢慢变好。
           </p>
         </section>

@@ -1,0 +1,135 @@
+[
+  {
+    "id": 2,
+    "user_id": "seed-author",
+    "title": "用 React 19 的 Actions 重构表单：从受控组件到渐进增强",
+    "slug": "react-19-actions-form-refactor",
+    "summary": "React 19 的 Actions 与 useActionState 让表单处理回归简洁，本文记录一次真实的重构过程与踩坑。",
+    "content": "## 为什么重构\n\n过去我们写表单，几乎是条件反射地堆 `useState`：每个字段一个状态，提交时手工组装对象，再手工处理 loading 与错误。字段一多，组件就成了状态管理的垃圾场。\n\nReact 19 引入的 **Actions** 改变了这一点。\n\n### 核心 API\n\n```tsx\nimport { useActionState } from \"react\";\n\nasync function submitAction(prevState, formData) {\n  const title = formData.get(\"title\");\n  if (!title) return { error: \"标题不能为空\" };\n  await api.create({ title });\n  return { ok: true };\n}\n\nfunction Form() {\n  const [state, action, pending] = useActionState(submitAction, {});\n  return (\n    <form action={action}>\n      <input name=\"title\" />\n      <button disabled={pending}>{pending ? \"提交中…\" : \"提交\"}</button>\n      {state.error && <p>{state.error}</p>}\n    </form>\n  );\n}\n```\n\n## 三个关键收益\n\n1. **渐进增强**：`<form action>` 在 JS 未加载时也能提交，服务端渲染直接可用。\n2. **状态内聚**：pending / error / data 都来自同一个 action 返回值，不再散落各处。\n3. **可测试性**：action 是一个纯函数，脱离组件也能单测。\n\n## 踩坑记录\n\n> 注意：`useActionState` 的 action 必须是 async 函数，返回值会成为新的 state。\n\n- 传给 `useActionState` 的初始值和 action 返回值的 **形状要保持一致**，否则类型推断会混乱。\n- 如果表单里有 `<input type=\"file\">`，记得用 `formData.get()` 拿到 `File` 对象后再走云存储上传。\n\n## 小结\n\n重构后，表单组件的行数减少了约 40%，而可读性显著提升。React 19 的 Actions 不是银弹，但对于「提交 → 校验 → 反馈」这类高频场景，它确实让代码更接近人话。",
+    "cover_url": null,
+    "status": "published",
+    "views": 328,
+    "read_minutes": 8,
+    "author_name": "墨迹",
+    "created_at": "2026-10-14T11:49:24.973865+08:00",
+    "updated_at": "2026-10-14T11:49:24.973865+08:00",
+    "published_at": "2026-10-12T11:49:24.973865+08:00",
+    "tags": [
+      "React",
+      "前端工程"
+    ]
+  },
+  {
+    "id": 3,
+    "user_id": "seed-author",
+    "title": "PostgreSQL 行级安全（RLS）实战：让数据库自己守住权限",
+    "slug": "postgresql-rls-in-practice",
+    "summary": "把权限校验从应用层下沉到数据库层，用 RLS 实现「已发布公开、草稿私有、写操作仅作者」的完整策略。",
+    "content": "## 权限应该在哪里校验？\n\n很多团队把权限逻辑写在前端和后端各处，结果是：前端防不住，后端漏一处就出事。\n\n**行级安全（Row Level Security, RLS）** 把这层保护下沉到数据库：无论请求从哪来，只要没通过策略，数据一律不可见。\n\n### 开启 RLS\n\n```sql\nALTER TABLE posts ENABLE ROW LEVEL SECURITY;\n```\n\n### 策略设计\n\n我们的博客需要三条规则：\n\n| 场景 | 策略 |\n|------|------|\n| 任何人可读已发布文章 | `status = 'published'` |\n| 作者可读自己的草稿 | `user_id = auth.uid()` |\n| 仅作者可写 | `WITH CHECK (user_id = auth.uid())` |\n\n拼起来就是一条 SELECT 策略：\n\n```sql\nCREATE POLICY posts_select_published ON posts\nFOR SELECT TO anon, authenticated\nUSING (status = 'published' OR user_id = auth.uid());\n```\n\n写入侧再加一道保险：\n\n```sql\nCREATE POLICY posts_insert_own ON posts\nFOR INSERT TO authenticated\nWITH CHECK (user_id = auth.uid());\n```\n\n## 为什么 DEFAULT auth.uid() 很重要\n\n给 user_id 列加上默认值，客户端插入时无需传它，也**无法伪造**成别人。配合 `WITH CHECK`，形成「自动填充 + 强制校验」的双保险。\n\n## 一个真实的教训\n\n> 我们曾在一个表上忘开 RLS，导致匿名用户可以读到全部草稿。\n\n上线检查清单里，请务必包含这一条：\n\n- [ ] 每张表都 `ENABLE ROW LEVEL SECURITY`\n- [ ] SELECT / INSERT / UPDATE / DELETE 四种操作都有明确策略\n- [ ] 用 anon 身份实测一遍，确认读不到不该读的数据\n\n数据库级别的权限，才是最后一道不会骗人的防线。",
+    "cover_url": null,
+    "status": "published",
+    "views": 512,
+    "read_minutes": 10,
+    "author_name": "墨迹",
+    "created_at": "2026-10-14T11:49:25.298994+08:00",
+    "updated_at": "2026-10-14T11:49:25.298994+08:00",
+    "published_at": "2026-10-09T11:49:25.298994+08:00",
+    "tags": [
+      "PostgreSQL",
+      "云开发"
+    ]
+  },
+  {
+    "id": 4,
+    "user_id": "seed-author",
+    "title": "从零实现一个 Markdown 阅读体验：排版比功能更重要",
+    "slug": "markdown-reading-experience",
+    "summary": "渲染 Markdown 只是第一步。行高、字距、代码块配色、图片留白——这些细节决定读者是否愿意读完。",
+    "content": "## 功能之外，是体验\n\n`react-markdown` 五分钟就能渲染出一篇文档。但为什么同样的内容，有些博客读起来舒服，有些读两段就想关掉？\n\n答案几乎都藏在**排版**里。\n\n### 1. 建立清晰的层级\n\n标题用衬线字体（serif），正文用无衬线（sans-serif），一眼就能区分「骨架」与「血肉」。\n\n```css\n.prose h2 {\n  font-family: var(--font-serif);\n  border-bottom: 1px solid var(--border);\n  padding-bottom: 0.35em;\n}\n```\n\n### 2. 给代码块足够的温度\n\n代码块不要用纯黑背景，那太刺眼。选一个带色相的深色，比如暖棕。\n\n### 3. 让留白呼吸\n\n- 段落间距略大于行高，形成天然的区块感\n- 图片上下大方留白，避免文字贴着图片\n- 引用块用左侧色条 + 浅底，而非整块深色\n\n## 阅读时长估算\n\n一个贴心的小功能：根据 CJK 字符数与英文单词数估算阅读时间。\n\n```ts\nconst minutes = Math.ceil(cjk / 350 + words / 220);\nreturn Math.max(1, minutes);\n```\n\n## 最后\n\n> 好排版是沉默的服务者 —— 读者不会称赞它，但会因此读完你的文章。\n\n把精力花在这些「看不见」的细节上，才是对读者真正的尊重。",
+    "cover_url": null,
+    "status": "published",
+    "views": 276,
+    "read_minutes": 7,
+    "author_name": "墨迹",
+    "created_at": "2026-10-14T11:49:25.733323+08:00",
+    "updated_at": "2026-10-14T11:49:25.733323+08:00",
+    "published_at": "2026-10-05T11:49:25.733323+08:00",
+    "tags": [
+      "CSS",
+      "前端工程"
+    ]
+  },
+  {
+    "id": 5,
+    "user_id": "seed-author",
+    "title": "腾讯云开发（TCB）+ React：半小时搭好带登录的全栈应用",
+    "slug": "tcb-react-fullstack-in-30-minutes",
+    "summary": "用 TCB 的托管 PostgreSQL、云存储与认证能力，跳过运维，直接写业务。",
+    "content": "## 为什么选 TCB\n\n自己搭一套后端，你要操心：数据库、连接池、鉴权、文件存储、跨域、部署。\n\n腾讯云开发（TCB）把这五件事打包好了。对我们这种「只想专心写业务」的独立开发者，它省下的时间就是全部价值。\n\n### 三步接入\n\n**第一步：初始化**\n\n```ts\nimport cloudbase from \"@cloudbase/js-sdk\";\n\nconst app = cloudbase.init({\n  env: import.meta.env.VITE_CLOUDBASE_ENV_ID,\n  region: \"ap-shanghai\",\n  accessKey: import.meta.env.VITE_CLOUDBASE_PUBLISH_KEY,\n});\n\n// 关键：显式指定 public schema\nexport const db = app.rdb({ database: \"public\" });\n```\n\n**第二步：直接读写** —— 权限交给 RLS，你不必写一行后端权限代码。\n\n**第三步：上传图片** —— 返回的直链直接塞进 Markdown 即可。\n\n## 什么时候需要后端\n\n如果只是标准 CRUD，前端 SDK 就够了。但当你要做**聚合统计、复杂联表、调用外部 API** 时，一个轻量 Express 后端仍然值得保留 —— 它用同一份用户令牌访问数据库，RLS 依然生效。\n\n| 需求 | 方案 |\n|------|------|\n| 增删改查 | 前端 SDK + RLS |\n| 复杂聚合 | PostgreSQL 函数 + RPC |\n| 外部集成 | Express 后端 |\n\n## 小结\n\n工具的意义在于让你把时间花在真正重要的地方。TCB 不是万能的，但对个人项目，它几乎是性价比最高的选择。",
+    "cover_url": null,
+    "status": "published",
+    "views": 189,
+    "read_minutes": 6,
+    "author_name": "墨迹",
+    "created_at": "2026-10-14T11:49:26.038398+08:00",
+    "updated_at": "2026-10-14T11:49:26.038398+08:00",
+    "published_at": "2026-09-30T11:49:26.038398+08:00",
+    "tags": [
+      "React",
+      "云开发"
+    ]
+  },
+  {
+    "id": 6,
+    "user_id": "seed-author",
+    "title": "写给一年后的自己：我在技术成长路上学到的五件事",
+    "slug": "five-lessons-on-growth",
+    "summary": "技术只是工具，成长是关于如何思考、如何取舍、如何与不确定共处。",
+    "content": "## 序\n\n又到了一年的节点。回头看，那些真正改变我的，往往不是某个具体的框架，而是几个朴素的认知。\n\n### 一、深度优先，再谈广度\n\n什么都会一点的人很多，能把一件事做到别人做不到的人很少。先把一个领域扎透，广度自然会来。\n\n### 二、写作是最好的思考\n\n> 如果你没法把它讲清楚，说明你还没真正想明白。\n\n写博客这一年，我最大的收获不是读者，而是被迫把模糊的理解变成清晰的文字。\n\n### 三、拥抱「够用就好」\n\n不是每个项目都需要微服务，不是每个页面都需要状态管理库。过早优化是万恶之源。\n\n### 四、和不确定共处\n\n技术更新太快，焦虑是常态。但你不必追逐每一个新框架 —— 底层原理、设计思想、工程直觉，这些东西十年都不过时。\n\n### 五、记录，然后坚持\n\n- 每周写一点，哪怕只有三段\n- 把踩过的坑记下来，未来的你会感谢现在的你\n- 坚持比天赋更稀缺\n\n## 结语\n\n一年后的我，如果你正读到这行字 —— 希望你还保持着好奇，还在认真地、慢慢地，变好。",
+    "cover_url": null,
+    "status": "published",
+    "views": 431,
+    "read_minutes": 5,
+    "author_name": "墨迹",
+    "created_at": "2026-10-14T11:49:26.343553+08:00",
+    "updated_at": "2026-10-14T11:49:26.343553+08:00",
+    "published_at": "2026-09-24T11:49:26.343553+08:00",
+    "tags": [
+      "成长思考"
+    ]
+  },
+  {
+    "id": 7,
+    "user_id": "seed-author",
+    "title": "CSS 现代布局速查：Grid、Flexbox 与容器查询的取舍",
+    "slug": "modern-css-layout-cheatsheet",
+    "summary": "一张表讲清 Grid、Flexbox、Container Queries 各自最适合的场景，附常用代码片段。",
+    "content": "## 布局的三种武器\n\n| 场景 | 推荐 |\n|------|------|\n| 一维排列（行或列） | Flexbox |\n| 二维网格（行列都要控制） | Grid |\n| 组件随容器宽度自适应 | Container Queries |\n\n### Flexbox：一维的王者\n\n```css\n.row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 1rem;\n}\n```\n\n### Grid：二维的秩序\n\n```css\n.grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));\n  gap: 1.5rem;\n}\n```\n\n`auto-fill` + `minmax` 是最优雅的响应式卡片布局，一行搞定，无需媒体查询。\n\n### Container Queries：组件自治\n\n```css\n.card-wrapper { container-type: inline-size; }\n\n@container (min-width: 400px) {\n  .card { flex-direction: row; }\n}\n```\n\n组件不再关心视口，只关心自己被放进多宽的容器 —— 这才是真正可复用的组件。\n\n## 选择口诀\n\n1. 一行或一列？→ Flexbox\n2. 有明确的行列结构？→ Grid\n3. 组件要自适应父容器？→ Container Queries\n\n## 结语\n\n工具没有优劣，只有场景。把三者用在对的地方，CSS 写起来会轻松很多。",
+    "cover_url": null,
+    "status": "published",
+    "views": 154,
+    "read_minutes": 6,
+    "author_name": "墨迹",
+    "created_at": "2026-10-14T11:49:26.647783+08:00",
+    "updated_at": "2026-10-14T11:49:26.647783+08:00",
+    "published_at": "2026-09-18T11:49:26.647783+08:00",
+    "tags": [
+      "CSS",
+      "前端工程"
+    ]
+  },
+  {
+    "title": "【草稿】本地化改造笔记",
+    "slug": "local-first-rewrite-notes",
+    "summary": "记录把博客从云端 TCB 迁移到本地 SQLite 的过程与踩坑。",
+    "content": "# 本地化改造笔记\n\n这是一篇**草稿**，用来验证草稿功能是否正常。\n\n## 为什么\n\n- 摆脱云服务依赖\n- 数据完全自己掌控\n- 零成本运行\n\n## 怎么做的\n\n1. 后端接入 SQLite\n2. 前端改为调用 REST API\n3. 本地账号密码登录\n",
+    "cover_url": null,
+    "status": "draft",
+    "views": 0,
+    "read_minutes": 2,
+    "author_name": "墨迹",
+    "tags": [
+      "工程实践"
+    ]
+  }
+]

@@ -2,14 +2,8 @@
 # 墨迹博客 · 前端 —— 生产镜像
 # 多阶段构建：node 构建 dist → nginx 托管静态文件
 #
-# 构建期需要 TCB 凭据（Vite 在编译时通过 define 注入）。
-# 把凭据作为 build-arg 传入：
-#   docker build \
-#     --build-arg VITE_CLOUDBASE_ENV_ID=xxx \
-#     --build-arg VITE_CLOUDBASE_REGION=ap-shanghai \
-#     --build-arg VITE_CLOUDBASE_PUBLISH_KEY=xxx \
-#     --build-arg VITE_OAUTH_RELAY_URL=https://... \
-#     -t moji-frontend .
+# 本地化架构下前端无需构建期密钥，直接 docker build 即可：
+#   docker build -t moji-frontend .
 # ============================================================
 
 # ---------- Stage 1: builder ----------
@@ -27,16 +21,6 @@ RUN pnpm install --frozen-lockfile \
 
 COPY . .
 
-# Build-time env —— 注入到 Vite 的 import.meta.env
-ARG VITE_CLOUDBASE_ENV_ID=""
-ARG VITE_CLOUDBASE_REGION="ap-shanghai"
-ARG VITE_CLOUDBASE_PUBLISH_KEY=""
-ARG VITE_OAUTH_RELAY_URL=""
-ENV VITE_CLOUDBASE_ENV_ID=$VITE_CLOUDBASE_ENV_ID
-ENV VITE_CLOUDBASE_REGION=$VITE_CLOUDBASE_REGION
-ENV VITE_CLOUDBASE_PUBLISH_KEY=$VITE_CLOUDBASE_PUBLISH_KEY
-ENV VITE_OAUTH_RELAY_URL=$VITE_OAUTH_RELAY_URL
-
 RUN pnpm build
 
 # ---------- Stage 2: nginx ----------
@@ -49,8 +33,7 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 后端上游地址：同容器网络下指向后端服务
-#   TCB 云托管：填后端服务的内网访问地址，如 http://moji-backend:3000
-#   同机 Docker：填 http://host.docker.internal:3000 或后端容器名
+#   同机 Docker Compose / 自定义网络：填后端容器名，如 http://moji-be:3000
 ENV BACKEND_UPSTREAM="http://127.0.0.1:3000"
 
 EXPOSE 80

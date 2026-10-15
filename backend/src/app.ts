@@ -2,21 +2,22 @@ import express, { Application } from 'express'
 import cors from 'cors'
 import compression from 'compression'
 import 'express-async-errors'
+import path from 'node:path'
 import { env } from './config/env.js'
+import { initSchema } from './config/database.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { httpLogger } from './middleware/logger.js'
 import { systemRouter } from './modules/system.js'
 import { blogRouter } from './modules/blog.js'
-// ============================================
-// Add your domain module imports here
-// ============================================
-// Example: Product Module
-// import { productRouter } from './modules/product.js'
+import { authRouter } from './modules/auth.js'
+import { uploadRouter, UPLOAD_DIR } from './modules/upload.js'
 
 export const createApp = (): Application => {
+  // 建表（幂等）
+  initSchema()
+
   const app = express()
 
-  // HTTP request logging
   app.use(httpLogger)
 
   app.use(
@@ -26,24 +27,28 @@ export const createApp = (): Application => {
     })
   )
 
-  // Body parsing and compression
-  app.use(express.json())
+  app.use(express.json({ limit: '5mb' }))
   app.use(express.urlencoded({ extended: true }))
   app.use(compression())
 
-  // API routes - System & Health
+  // 上传文件静态服务
+  app.use('/uploads', express.static(UPLOAD_DIR))
+
+  // API 路由
   app.use(env.API_PREFIX, systemRouter)
-
-  // Blog aggregate + verified-write routes
+  app.use(`${env.API_PREFIX}/auth`, authRouter)
   app.use(`${env.API_PREFIX}/blog`, blogRouter)
+  app.use(`${env.API_PREFIX}/upload`, uploadRouter)
 
-  // ============================================
-  // Add your domain module routes here
-  // ============================================
-  // Example: Product Module
-  // app.use(`${env.API_PREFIX}/products`, productRouter)
+  // 生产单容器部署：托管前端构建产物（若存在）
+  const distDir = path.resolve(process.cwd(), '../frontend/dist')
+  app.use(express.static(distDir, { fallthrough: true }))
+  app.get(/^\/(?!api|uploads).*/, (_req, res) => {
+    res.sendFile(path.join(distDir, 'index.html'), (err) => {
+      if (err) res.status(404).end()
+    })
+  })
 
-  // Error handling
   app.use(errorHandler)
 
   return app

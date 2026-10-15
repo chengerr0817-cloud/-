@@ -18,7 +18,6 @@ import Search from "./pages/Search";
 import Login from "./pages/Login";
 import Write from "./pages/Write";
 import MyPosts from "./pages/MyPosts";
-import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
 
 /**
@@ -81,7 +80,6 @@ function AppRoutes() {
             <Route path="/about" data-genie-title="关于" data-genie-key="About" element={<PageTransition transition="slide-up"><About /></PageTransition>} />
             <Route path="/search" data-genie-title="搜索" data-genie-key="Search" element={<PageTransition transition="fade"><Search /></PageTransition>} />
             <Route path="/login" data-genie-title="登录" data-genie-key="Login" element={<PageTransition transition="fade"><Login /></PageTransition>} />
-            <Route path="/auth/callback" data-genie-title="登录回调" data-genie-key="AuthCallback" element={<PageTransition transition="fade"><AuthCallback /></PageTransition>} />
             <Route path="/write" data-genie-title="写文章" data-genie-key="Write" element={<PageTransition transition="slide-up"><ProtectedRoute><Write /></ProtectedRoute></PageTransition>} />
             <Route path="/edit/:id" data-genie-title="编辑文章" data-genie-key="Edit" element={<PageTransition transition="slide-up"><ProtectedRoute><Write /></ProtectedRoute></PageTransition>} />
             <Route path="/me/posts" data-genie-title="我的文章" data-genie-key="MyPosts" element={<PageTransition transition="slide-up"><ProtectedRoute><MyPosts /></ProtectedRoute></PageTransition>} />

@@ -1,7 +1,7 @@
 {
-  "name": "spec-template-backend",
+  "name": "moji-blog-backend",
   "version": "1.0.0",
-  "description": "Backend API server for full-stack web application template",
+  "description": "墨迹博客后端 · Express + SQLite (node:sqlite) + JWT",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "test": "jest",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "seed": "tsx src/scripts/seed.ts"
   },
   "keywords": [
     "express",
@@ -20,23 +21,27 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-async-errors": "^3.1.1",
     "jsonwebtoken": "^9.0.3",
-    "jwks-rsa": "^4.1.0",
+    "multer": "^2.4.0",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/bcryptjs": "^3.0.0",
     "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.10.2",
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/eslint-plugin": "^8.47.0",

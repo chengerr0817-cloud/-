@@ -15,7 +15,7 @@ export default function PostDetail() {
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { data, isLoading, isError } = usePostDetail(slug)
+  const { data, isLoading, error } = usePostDetail(slug)
 
   // Bump the view counter once per slug visit.
   useEffect(() => {
@@ -25,9 +25,9 @@ export default function PostDetail() {
   }, [slug, data?.found])
 
   const post = data?.post
-  const tags = data?.tags || []
+  const tags = useMemo(() => data?.tags ?? [], [data?.tags])
   const related = data?.related || []
-  const isAuthor = !!user && !!post && user.uid === post.user_id
+  const isAuthor = !!user && !!post && post.user_id != null && user.id === post.user_id
 
   // Rough reading progress via document height is handled by ReadingProgress.
 
@@ -56,7 +56,7 @@ export default function PostDetail() {
     )
   }
 
-  if (isError || !data?.found || !post) {
+  if (error || !data?.found || !post) {
     return (
       <div
         className="container flex flex-col items-center justify-center text-center"

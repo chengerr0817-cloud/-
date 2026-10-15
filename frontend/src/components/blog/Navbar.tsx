@@ -128,18 +128,18 @@ export function Navbar() {
                 <DropdownMenuTrigger asChild>
                   <button className="rounded-full outline-none ring-ring focus-visible:ring-2" aria-label="用户菜单">
                     <Avatar className="h-9 w-9 border border-border">
-                      <AvatarImage src={user.avatar_url || undefined} alt={user.name || user.email} />
+                      <AvatarImage src={undefined} alt={user.display_name || user.username} />
                       <AvatarFallback className="bg-primary/12 text-primary font-semibold">
-                        {(user.name || user.email || 'U').slice(0, 1).toUpperCase()}
+                        {(user.display_name || user.username || 'U').slice(0, 1).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel className="flex flex-col gap-0.5">
-                    <span className="truncate">{user.name || '博主'}</span>
+                    <span className="truncate">{user.display_name || user.username}</span>
                     <span className="text-xs font-normal text-muted-foreground truncate">
-                      {user.email}
+                      @{user.username}
                     </span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />

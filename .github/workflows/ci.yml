@@ -4,8 +4,7 @@
 # 触发：推送到 main、向 main 提 PR
 # 内容：前后端类型检查 + 构建验证 + Docker 镜像构建
 #
-# 注意：CI 使用占位凭据，无需真实 TCB 密钥即可跑通
-# （前端 Vite 构建会把空值注入产物，但不影响编译与类型检查）
+# 本地化架构下无需任何云端密钥，CI 开箱即跑。
 # ============================================================
 
 name: CI
@@ -64,12 +63,6 @@ jobs:
 
       - name: Build
         run: pnpm build
-        env:
-          # 构建期占位值 —— CI 无需真实密钥
-          VITE_CLOUDBASE_ENV_ID: ci-placeholder-env
-          VITE_CLOUDBASE_REGION: ap-shanghai
-          VITE_CLOUDBASE_PUBLISH_KEY: ci-placeholder-key
-          VITE_OAUTH_RELAY_URL: https://example.com/oauth
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -146,10 +139,5 @@ jobs:
           context: ./frontend
           push: false
           load: false
-          build-args: |
-            VITE_CLOUDBASE_ENV_ID=ci-placeholder-env
-            VITE_CLOUDBASE_REGION=ap-shanghai
-            VITE_CLOUDBASE_PUBLISH_KEY=ci-placeholder-key
-            VITE_OAUTH_RELAY_URL=https://example.com/oauth
           cache-from: type=gha
           cache-to: type=gha,mode=max

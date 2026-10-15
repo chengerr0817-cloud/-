@@ -47,14 +47,14 @@
 | 编辑文章 | 修改自己的文章，仅作者可编辑 |
 | 草稿/发布 | 状态切换：`draft`（仅作者可见）/ `published`（公开） |
 | 我的文章 | 管理列表，查看草稿与已发布，支持删除 |
-| 附件上传 | 图片上传到云存储，返回直链插入 Markdown |
+| 附件上传 | 图片上传到本地 `uploads/` 目录，返回直链插入 Markdown |
 
 ### 2.4 登录认证
 | 功能 | 说明 |
 |------|------|
-| 邮箱验证码登录 | 输入邮箱 → 收验证码 → 登录/自动注册 |
-| Google 登录 | OAuth 一键登录 |
-| 会话保持 | 令牌自动持久化与刷新 |
+| 账号密码登录 | 用户名 + 密码，bcrypt 加盐哈希校验 |
+| 注册 | 首次使用可注册；站点无账号时登录页默认展示注册表单 |
+| 会话保持 | JWT 令牌（30 天）持久化到 localStorage，自动附加到请求头 |
 | 路由守卫 | 写作/管理页需登录，未登录跳转登录页 |
 
 ### 2.5 关于页面
@@ -72,7 +72,7 @@
 | 读者 | 我想搜索一篇记得标题的文章 | 输入关键词能匹配标题与正文 |
 | 读者 | 我想舒服地读一篇长文 | Markdown 正确渲染，代码高亮，有阅读进度提示 |
 | 博主 | 我想登录后写文章 | 登录后可进入编辑器，支持实时预览 |
-| 博主 | 我想上传配图 | 选择本地图片上传到云存储，自动插入 Markdown 语法 |
+| 博主 | 我想上传配图 | 选择本地图片上传，返回直链可插入 Markdown |
 | 博主 | 我想先存草稿 | 文章可保存为草稿，草稿不出现在公开列表 |
 | 博主 | 我想改自己的文章 | 只有作者能编辑/删除自己的文章 |
 | 博主 | 我想维护标签 | 写文章时输入标签，标签自动创建并关联 |
@@ -88,8 +88,7 @@
 /tags/:tagName         标签详情 —— 该标签下的文章列表
 /about                 关于 —— 博主简介 + 技能 + 站点统计
 /search                搜索结果 —— 关键词匹配的文章列表
-/login                 登录/注册 —— 邮箱验证码 + Google OAuth
-/auth/callback         OAuth 回调 —— 处理登录态（自动）
+/login                 登录/注册 —— 用户名 + 密码
 /write                 新建文章（需登录）
 /edit/:id              编辑文章（需登录，仅作者）
 /me/posts              我的文章管理（需登录）
@@ -104,87 +103,90 @@
 ### 5.1 `posts`（文章表）
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | BIGINT IDENTITY | 主键 |
-| `user_id` | TEXT | 作者 ID（`DEFAULT auth.uid()`） |
+| `id` | INTEGER PK | 主键（自增） |
+| `user_id` | INTEGER | 作者 ID（外键 → `users.id`） |
 | `title` | TEXT | 标题 |
 | `slug` | TEXT | URL 别名（唯一） |
 | `summary` | TEXT | 摘要 |
 | `content` | TEXT | Markdown 正文 |
-| `cover_url` | TEXT | 封面图 URL（云存储） |
+| `cover_url` | TEXT | 封面图 URL（`/uploads/...`） |
 | `status` | TEXT | `draft` / `published` |
 | `views` | INTEGER | 阅读量（默认 0） |
 | `read_minutes` | INTEGER | 预计阅读分钟数 |
 | `author_name` | TEXT | 作者昵称（冗余，便于公开展示） |
-| `created_at` | TIMESTAMPTZ | 创建时间 |
-| `updated_at` | TIMESTAMPTZ | 更新时间 |
-| `published_at` | TIMESTAMPTZ | 发布时间 |
+| `created_at` | TEXT | 创建时间 |
+| `updated_at` | TEXT | 更新时间 |
+| `published_at` | TEXT | 发布时间 |
 
 ### 5.2 `tags`（标签表）
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | BIGINT IDENTITY | 主键 |
-| `user_id` | TEXT | 创建者（`DEFAULT auth.uid()`，公开读） |
+| `id` | INTEGER PK | 主键（自增） |
 | `name` | TEXT | 标签名（唯一） |
 | `slug` | TEXT | URL 别名 |
 | `color` | TEXT | 标签色 |
-| `created_at` | TIMESTAMPTZ | 创建时间 |
 
 ### 5.3 `post_tags`（文章-标签关联表）
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | BIGINT IDENTITY | 主键 |
-| `post_id` | BIGINT | 文章 ID |
-| `tag_id` | BIGINT | 标签 ID |
+| `post_id` | INTEGER | 文章 ID |
+| `tag_id` | INTEGER | 标签 ID |
 
-### 5.4 `comments`（评论表，预留）
+> 复合主键 `(post_id, tag_id)`，随文章删除级联清理。
+
+### 5.4 `users`（用户表）
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | BIGINT IDENTITY | 主键 |
-| `user_id` | TEXT | 评论者（`DEFAULT auth.uid()`） |
-| `post_id` | BIGINT | 文章 ID |
-| `author_name` | TEXT | 评论者昵称 |
-| `content` | TEXT | 评论内容 |
-| `created_at` | TIMESTAMPTZ | 创建时间 |
+| `id` | INTEGER PK | 主键（自增） |
+| `username` | TEXT | 用户名（唯一） |
+| `password_hash` | TEXT | bcrypt 哈希 |
+| `display_name` | TEXT | 显示昵称 |
+| `created_at` | TEXT | 注册时间 |
 
-### 5.5 RLS 策略总览
-| 表 | anon 读 | authenticated 读 | 写 |
-|----|---------|------------------|-----|
-| `posts` | 仅 `published` | `published` 或自己的草稿 | 仅作者本人增删改 |
-| `tags` | 全部 | 全部 | 登录用户可创建 |
-| `post_tags` | 全部 | 全部 | 仅关联自己文章时 |
-| `comments` | 全部 | 全部 | 评论仅作者可删，登录可发 |
+### 5.5 访问控制
+| 数据 | 公开读 | 需登录 | 归属校验 |
+|------|--------|--------|----------|
+| `posts` | 仅 `published` | 草稿仅自己可见（`/my/posts`） | 改/删校验 `user_id` 匹配 |
+| `tags` | 全部 | 随文章自动创建 | — |
+| `post_tags` | 随文章返回 | — | 随文章归属校验 |
+
+> 权限在 **服务端 SQL 层**强制：写操作前先校验 `posts.user_id === req.user.id`，
+> 不匹配一律返回 404，避免暴露文章是否存在。
 
 ---
 
 ## 6. API 端点设计
 
-> 遵循 JSON 协议：数据操作一律 POST + JSON body；标准 CRUD 走前端 TCB SDK（`app.rdb()`）。
+> 前端通过 Axios 调用 `/api/*` REST 接口；需登录的接口在 `Authorization: Bearer <JWT>` 中携带令牌。
 
-### 6.1 前端 SDK 直连（主要路径）
-| 操作 | 方式 | 说明 |
+### 6.1 公开读取
+| 操作 | 端点 | 说明 |
 |------|------|------|
-| 文章列表 | `db.from('posts').select()` | 过滤 `status=published`，按 `published_at` 倒序，`range` 分页 |
-| 文章详情 | `db.from('posts').select().eq('slug', x).single()` | 按 slug 查询 |
-| 我的文章 | `db.from('posts').select().eq('user_id', uid)` | 含草稿 |
-| 创建/更新/删除 | `db.from('posts').insert/update/delete` | RLS 保证仅作者可写 |
-| 标签列表 | `db.from('tags').select()` | 全部标签 |
-| 标签关联 | `db.from('post_tags').select('*, tag:tags(*)')` | 外键联表 |
+| 文章列表 | `GET /api/blog/posts` | `page` / `limit` 分页，仅 `published` |
+| 文章详情 | `GET /api/blog/posts/:slug` | 含标签与相关文章 |
+| 热门文章 | `GET /api/blog/posts/hot` | 按 `views` 倒序 |
+| 标签列表 | `GET /api/blog/tags` | 含各标签已发布文章数 |
+| 站点统计 | `GET /api/blog/stats` | 文章数 / 标签数 / 总阅读 / 总字数 |
+| 浏览量 +1 | `POST /api/blog/views/:slug` | 幂等递增 |
 
-### 6.2 PostgreSQL 函数（RPC，复杂聚合）
-| 函数名 | 返回 | 说明 |
-|--------|------|------|
-| `list_posts_with_tags(p_status, p_limit, p_offset)` | json | 文章列表 + 标签聚合 + 总数 |
-| `get_post_detail(p_slug)` | json | 文章详情 + 标签 + 相关文章 |
-| `list_tags_with_count()` | json | 标签 + 各标签文章数 |
-| `get_site_stats()` | json | 站点统计（文章数/标签数/总阅读） |
-| `increment_post_views(p_slug)` | json | 阅读量自增 |
-
-### 6.3 后端接口（Express，辅助）
+### 6.2 登录认证
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| POST | `/api/auth/register` | 注册并返回 JWT |
+| POST | `/api/auth/login` | 登录并返回 JWT |
+| GET | `/api/auth/me` | 当前登录用户（需令牌） |
+| GET | `/api/auth/status` | 站点是否已有账号（用于引导注册） |
+
+### 6.3 写作与管理（需登录）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/blog/my/posts` | 我的文章（含草稿） |
+| GET | `/api/blog/my/posts/:id/tags` | 读取文章标签名（编辑用） |
+| POST | `/api/blog/posts` | 新建文章 |
+| PUT | `/api/blog/posts/:id` | 更新文章 |
+| DELETE | `/api/blog/posts/:id` | 删除文章 |
+| POST | `/api/upload` | 上传图片 / 附件（≤10MB） |
 | GET | `/api/health` | 健康检查 |
-| POST | `/api/posts/hot` | 热门文章（按阅读量排序，服务端聚合） |
-| POST | `/api/stats/site` | 站点统计（可选，RPC 优先） |
 
 ---
 
@@ -193,16 +195,17 @@
 - **响应式**：375 / 768 / 1024 / 1440 四档断点适配
 - **可访问性**：正文对比度 ≥ 4.5:1，键盘可导航，焦点态可见，尊重 `prefers-reduced-motion`
 - **SEO**：每页唯一 H1、语义化标签、`<title>` ≤ 60 字符、meta description ≤ 160 字符、文章页 JSON-LD
-- **性能**：图片懒加载 + 云存储 CDN；列表分页；TanStack Query 缓存
+- **性能**：图片懒加载；列表分页；hooks 层请求去重与状态缓存
 - **设计系统**：所有业务代码使用 CSS 变量（颜色 / 字号 / 间距 / 阴影 / 圆角），不硬编码
 
 ---
 
-## 8. 云能力映射
+## 8. 运行环境映射
 
-| 需求 | TCB 能力 |
-|------|----------|
-| 文章数据存储 | TCB 托管 PostgreSQL（`app.rdb()` + RLS） |
-| 图片/附件存储 | TCB 云存储（`app.uploadFile()` → 直链） |
-| 登录认证 | TCB Auth（邮箱验证码 + Google OAuth + 自定义登录） |
-| 复杂查询 | PostgreSQL 函数 + RPC |
+| 需求 | 实现 |
+|------|------|
+| 文章 / 标签数据存储 | 本地 SQLite（`node:sqlite`，WAL 模式） |
+| 图片 / 附件存储 | 本地 `backend/uploads/`，经 `/uploads/*` 提供 |
+| 登录认证 | 本地账号密码（bcrypt）+ JWT（30 天） |
+| 复杂查询 | 服务端 SQL 聚合（`blog-repo.ts`） |
+| 部署 | 单进程 Express 可同时托管 API 与前端静态资源 |

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FileText, Loader2, Pencil, PenLine, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useDeletePost, useMyPosts } from '@/hooks/usePosts'
+import { useMyPosts, deletePost } from '@/hooks/usePosts'
+import { getErrorMessage } from '@/lib/api-client'
 import { useAuth } from '@/lib/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,14 +19,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import { FadeIn, Stagger, HoverLift } from '@/components/MotionPrimitives'
 import { formatDate } from '@/lib/blog-utils'
-import type { PostWithTags } from '@/types/blog'
+import type { Post } from '@/hooks/usePosts'
 
 export default function MyPosts() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { data: posts, isLoading } = useMyPosts(user?.uid)
-  const deletePost = useDeletePost()
-  const [pendingDelete, setPendingDelete] = useState<PostWithTags | null>(null)
+  const { data: posts, isLoading, refetch } = useMyPosts(!!user)
+  const [deleting, setDeleting] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<Post | null>(null)
 
   const list = posts || []
   const drafts = list.filter((p) => p.status === 'draft')
@@ -33,12 +34,15 @@ export default function MyPosts() {
 
   const confirmDelete = async () => {
     if (!pendingDelete) return
+    setDeleting(true)
     try {
-      await deletePost.mutateAsync(pendingDelete.id)
+      await deletePost(pendingDelete.id)
       toast.success('文章已删除')
+      refetch()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败')
+      toast.error(getErrorMessage(err))
     } finally {
+      setDeleting(false)
       setPendingDelete(null)
     }
   }
@@ -153,7 +157,7 @@ export default function MyPosts() {
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deletePost.isPending ? <Loader2 size={15} className="animate-spin" /> : '删除'}
+              {deleting ? <Loader2 size={15} className="animate-spin" /> : '删除'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
