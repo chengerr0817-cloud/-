@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom'
 import { Hash, Tag as TagIcon } from 'lucide-react'
-import { useTags } from '@/hooks/usePosts'
+import { useTags, type Tag } from '@/hooks/usePosts'
 import { FadeIn, Stagger, HoverLift } from '@/components/MotionPrimitives'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function Tags() {
   const { data: tags, isLoading } = useTags()
-  const list = (tags || []).filter((t) => t.post_count > 0)
+  const list = (tags || []).filter(
+    (t): t is Tag & { post_count: number } =>
+      typeof t.post_count === 'number' && t.post_count > 0
+  )
   const maxCount = Math.max(1, ...list.map((t) => t.post_count))
 
   return (

@@ -15,9 +15,12 @@ export interface Tag {
 
 export interface Post {
   id: number
+  user_id?: number | null
   title: string
   slug: string
   summary: string | null
+  /** 详情与我的文章接口返回全文；列表场景可能为 null */
+  content: string | null
   cover_url: string | null
   status: 'draft' | 'published'
   views: number

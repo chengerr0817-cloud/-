@@ -22,7 +22,7 @@ export default function Home() {
   const posts = data?.items || []
   const total = data?.total || 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const hotTags = (tags || []).filter((t) => t.post_count > 0).slice(0, 10)
+  const hotTags = (tags || []).filter((t) => (t.post_count ?? 0) > 0).slice(0, 10)
 
   return (
     <div>

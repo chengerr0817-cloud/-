@@ -143,6 +143,7 @@ export default function Write() {
     title: title || '未命名文章',
     slug: '',
     summary: summary || markdownToPlain(content, 120) || '文章摘要将在这里显示…',
+    content: content || null,
     cover_url: coverUrl || null,
     status: 'draft',
     views: 0,
